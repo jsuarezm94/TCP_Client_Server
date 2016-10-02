@@ -47,13 +47,13 @@ void listDirectory (int sock) {
 	int 	dir_size = 0;
 	char 	file_buf[100];
 	DIR	*dir_stream;	
-	struct	dirent *ep;		// change var name
+	struct	dirent *dir_read;		// change var name
 
 	dir_stream = opendir("./");
 
 	if (dir_stream != NULL) {
-		while ( ep = readdir(dir_stream) ) {
-			strcpy (file_buf, ep->d_name);
+		while ( dir_read = readdir(dir_stream) ) {
+			strcpy (file_buf, dir_read->d_name);
 			dir_size += sizeof(file_buf);
 			memset(file_buf, '\0', sizeof(file_buf));
 		}
@@ -63,8 +63,8 @@ void listDirectory (int sock) {
 		send (sock, &dir_size, sizeof(int32_t), 0);
 
 		dir_stream = opendir("./");
-		while ( ep = readdir(dir_stream) ) {
-			strcpy ( file_buf, ep->d_name );
+		while ( dir_read = readdir(dir_stream) ) {
+			strcpy ( file_buf, dir_read->d_name );
 			send ( sock, file_buf, sizeof(file_buf), 0 );
 			memset(file_buf, '\0', sizeof(file_buf));
 		}
@@ -143,7 +143,7 @@ int main (int argc, char * argv[]) {
 			} else if (strcmp(buf,"DEL")==0){
 				//deleteFile(new_s);
 			} else if (strcmp(buf,"LIS")==0){
-				//listDirectory(new_s);
+				listDirectory(new_sock);
 			} else if (strcmp(buf,"XIT")==0){
 				//connected = 0;
 			}

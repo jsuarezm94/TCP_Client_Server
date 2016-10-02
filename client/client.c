@@ -21,6 +21,29 @@
 
 #define BUF_SIZE 4096		// Max size of buffer used for message
 
+void listDirectory( int sock ) {
+
+	int dir_size=0;
+	int dir_bytes=0;
+	float n_bytes=0;
+	char file_buf[100];
+
+	/* Receive size of directory from server */
+	recv(sock, &dir_size, sizeof(int32_t), 0);
+	dir_size = ntohl(dir_size);
+
+	/* Read directory listing */
+	memset(file_buf, '\0', sizeof(file_buf));	// Empty buffer
+	while (n_bytes < dir_size) {
+		dir_bytes = recv(sock, file_buf, sizeof(file_buf), 0);
+		n_bytes += dir_bytes;
+		printf("%s\n",file_buf);
+		fflush(stdout);
+		memset(file_buf, '\0', sizeof(file_buf));
+	} //end WHILE
+
+} //end LISTDIRECTORY
+
 
 int main (int argc, char * argv[]) {
 
@@ -86,7 +109,7 @@ int main (int argc, char * argv[]) {
       } else if (strcmp(command,"UPL")==0){
          //uploadFile(s);
       } else if (strcmp(command,"LIS")==0){
-         //listDirectory(s);
+         listDirectory(sock);
       } else if (strcmp(command,"DEL")==0){
          //deleteFile(s);
       } else if (strcmp(command,"XIT")==0){
