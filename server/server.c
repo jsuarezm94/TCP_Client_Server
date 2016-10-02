@@ -6,7 +6,7 @@
  * TCP PROGRAM - CLIENT
  * DESCRIPTION:
  */
-
+/*
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -16,11 +16,64 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
-
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <time.h>
+#include <math.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <openssl/md5.h>
 #define MAX_PENDING 5				// Max number of pending connections
 /*
 #define BUF_SIZE 4096           	// Max size of buffer used for message
 */
+
+
+
+
+void listDirectory (int sock) {
+
+	int 	dir_size = 0;
+	char 	file_buf[100];
+	DIR	*dir_stream;	
+	struct	dirent *ep;		// change var name
+
+	dir_stream = opendir("./");
+
+	if (dir_stream != NULL) {
+		while ( ep = readdir(dir_stream) ) {
+			strcpy (file_buf, ep->d_name);
+			dir_size += sizeof(file_buf);
+			memset(file_buf, '\0', sizeof(file_buf));
+		}
+
+		closedir(dir_stream);
+		dir_size = htonl(dir_size);
+		send (sock, &dir_size, sizeof(int32_t), 0);
+
+		dir_stream = opendir("./");
+		while ( ep = readdir(dir_stream) ) {
+			strcpy ( file_buf, ep->d_name );
+			send ( sock, file_buf, sizeof(file_buf), 0 );
+			memset(file_buf, '\0', sizeof(file_buf));
+		}
+
+	}
+} 
+
+
+
 
 int main (int argc, char * argv[]) {
 
