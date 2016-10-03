@@ -20,6 +20,7 @@
 #include <time.h>
 
 #define BUF_SIZE 4096		// Max size of buffer used for message
+#define MAX_FILENAME 100	// Max size of file name sent to server
 
 void listDirectory( int sock ) {
 
@@ -44,6 +45,53 @@ void listDirectory( int sock ) {
 
 } //end LISTDIRECTORY
 
+void deleteFile( int sock ) {
+
+	/* Declare variables */
+	char file_name[MAX_FILENAME];
+	short int file_len;
+	int file_exists;
+	char user_response[5];
+	int server_ack;
+
+	/* Prompt user input */
+	printf("Enter file name to delete: ");
+	scanf("%s",file_name);
+
+	/* Prepare variables to send to server */
+	file_len = strlen(file_name);
+	file_len = htonl(file_len);
+
+	/* Send file length/name to server */
+	send(sock, &file_len, sizeof(int32_t), 0);
+	if (send(sock, file_name, sizeof(file_name),0) == -1) {
+		perror("ERROR: client-send()\n");
+		exit(1);
+	}
+	
+	/* Receive confirmation of file from server */
+	file_exists = 0;
+	if (file_exists = recv(sock, &file_exists, sizeof(int), 0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	} // end receive check
+
+	/* Confirm deletion of file */
+	printf("File Exists\n");
+	printf("Confirm deletion of file %s? (Y\\N)\n", file_name);
+	scanf("%s", user_response);
+	send(sock, user_response, sizeof(user_response), 0);
+
+	/* Server confirmation of file deletion */
+	recv(sock, &server_ack, sizeof(int), 0);
+	if (server_ack == 1) {
+		printf("File deletion: successful\n");
+	} else {
+		printf("File deletion: not successful\n");
+	}
+
+
+} //end DELETEFILE
 
 int main (int argc, char * argv[]) {
 
