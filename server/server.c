@@ -40,7 +40,51 @@
 */
 
 
+void deleteFile (int sock) {
+	int fname_size = 0;
+	int file_access = 0;
+	char client_confirm[5];
+	
+	recv(sock, &fname_size, sizeof(fname_size),0);
+	printf("fname_size = %i\n",fname_size);
 
+	 fname_size = ntohl(fname_size); //
+	char file_name[fname_size+1];
+	
+	memset(file_name, '\0',sizeof(file_name));
+	while(strlen(file_name)==0) {
+		recv(sock, file_name, sizeof(file_name),0);
+		printf("Received file_name = %s\n",file_name);
+	}
+	
+	if ( (file_access = access(file_name, F_OK)) !=-1) {
+		file_access = 1;
+		printf ("file_access = %i\n", file_access);
+	}
+	send(sock,&file_access,sizeof(int),0);
+	printf("Sending confirmation.\n");
+
+	// waiting for client confirmation
+	// could change the below implementation
+	memset(client_confirm, '\0', sizeof(client_confirm));	
+	//int a = 0;
+	while(strlen(client_confirm)==0) {
+		recv(sock, client_confirm, sizeof(client_confirm), 0);
+		printf("Received client_confirm = %c\n", client_confirm);
+	//	a=1;
+	}
+	//
+	if (strcmp(client_confirm, "Y")) {
+		int delete_confirm = 1;
+		int remove_bool = remove(file_name);
+		printf("before check\n");
+		if (remove_bool!=0) {
+			delete_confirm = -1;
+		}
+		send(sock, &delete_confirm, sizeof(int),0);
+		printf("send delete_confirm\n");
+	}
+}
 
 void listDirectory (int sock) {
 
@@ -141,7 +185,7 @@ int main (int argc, char * argv[]) {
 			} else if (strcmp(buf,"UPL")==0){
 				//upload(new_s);
 			} else if (strcmp(buf,"DEL")==0){
-				//deleteFile(new_s);
+				deleteFile(new_sock);
 			} else if (strcmp(buf,"LIS")==0){
 				listDirectory(new_sock);
 			} else if (strcmp(buf,"XIT")==0){
