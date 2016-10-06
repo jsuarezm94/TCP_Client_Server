@@ -3,19 +3,6 @@
  * NETID: jsuarezm & jdiazort
  * DATE: OCTOBER 12, 2016
  * COMPUTE NETWORKS
- * TCP PROGRAM - CLIENT
- * DESCRIPTION:
- */
-/*
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <time.h>
-#include <stdint.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,55 +21,287 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <openssl/md5.h>
-#define MAX_PENDING 5				// Max number of pending connections
+#define MAX_MD5LENGTH 50
+#define MAX_FILENAME 100
+#define MAX_PENDING 5
+#define MAX_LINE 256
+
+
+int32_t file_exists(char * filename)
+{
+	FILE * file;
+	int32_t size;
+	if (file = fopen(filename, "r"))
+	{
+		fseek(file,0,SEEK_END);
+		size = ftell(file);
+		fseek(file,0,SEEK_SET);
+		fclose(file);
+		return size;
+	}
+	return -1;
+}
+
+void makeDirectory(int sock) {
 /*
-#define BUF_SIZE 4096           	// Max size of buffer used for message
+        int file_name_len = 0;
+        int file_exists;
+        char status[5];
+
+        recv(s,&file_name_len,sizeof(file_name_len),0);
+        file_name_len = ntohl(file_name_len);
+        char file_name[file_name_len+1];
+
+        memset(file_name,'\0',sizeof(file_name));
+        while(strlen(file_name)==0){
+                recv(s,file_name,sizeof(file_name),0);
+        }
+
+        if (access(file_name,F_OK)!=-1){
+                file_exists = -2;
+        } 
+	else if (access(file_name, ))  {
+                file_exists = 1;
+        }
+	
+        send(s,&file_exists,sizeof(int),0);
 */
+}
 
+void upload(int s) {
 
-void deleteFile (int sock) {
-	int fname_size = 0;
-	int file_access = 0;
-	char client_confirm[5];
-	
-	recv(sock, &fname_size, sizeof(fname_size),0);
-	printf("fname_size = %i\n",fname_size);
+	int filename_len;
+	char md5client[100];
+	struct timeval tv;
+	float start_time, end_time, nBytes, throughput;
 
-	 fname_size = ntohl(fname_size); //
-	char file_name[fname_size+1];
-	
-	memset(file_name, '\0',sizeof(file_name));
-	while(strlen(file_name)==0) {
-		recv(sock, file_name, sizeof(file_name),0);
-		printf("Received file_name = %s\n",file_name);
+	recv(s,&filename_len,sizeof(filename_len),0);
+	filename_len = ntohl(filename_len);
+	printf("Received filename_length\n");
+
+	char filename[100];
+
+	memset(filename,'\0',sizeof(filename));
+	while(strlen(filename)<filename_len){
+		recv(s,filename,sizeof(filename),0);
 	}
-	
-	if ( (file_access = access(file_name, F_OK)) !=-1) {
-		file_access = 1;
-		printf ("file_access = %i\n", file_access);
-	}
-	send(sock,&file_access,sizeof(int),0);
-	printf("Sending confirmation.\n");
+        printf("filename received.\n");
 
-	// waiting for client confirmation
-	// could change the below implementation
-	memset(client_confirm, '\0', sizeof(client_confirm));	
-	//int a = 0;
-	while(strlen(client_confirm)==0) {
-		recv(sock, client_confirm, sizeof(client_confirm), 0);
-		printf("Received client_confirm = %c\n", client_confirm);
-	//	a=1;
+
+	char ack[4] = "ACK";
+	if(send(s,ack,sizeof(ack),0)==-1){
+		perror("Server send error!"); exit(1);
 	}
-	//
-	if (strcmp(client_confirm, "Y")) {
-		int delete_confirm = 1;
-		int remove_bool = remove(file_name);
-		printf("before check\n");
-		if (remove_bool!=0) {
-			delete_confirm = -1;
+
+        int filesize = 0;
+        recv(s,&filesize,sizeof(int32_t),0);
+        filesize = ntohl(filesize);
+        printf("filesize received = %d\n", filesize);
+
+
+	gettimeofday(&tv,NULL);
+	start_time = tv.tv_usec;
+
+	FILE *fp = fopen(filename,"w");
+
+
+	int n;
+	char line[20000];
+	memset(line,'\0',sizeof(line));
+	int recv_len=0;
+	int bytesrevd = 0;
+	char recvbuf[10000];
+	int rcvbufmax=sizeof(line);
+	if (rcvbufmax>filesize)
+		rcvbufmax=filesize;
+	while ((recv_len=recv(s,recvbuf,rcvbufmax,0))>0){
+		bytesrevd += recv_len;
+		int write_size = fwrite(recvbuf, sizeof (char), recv_len, fp);
+		if (write_size<recv_len)
+			printf("File write failed!\n");
+		bzero(line, sizeof(line));
+		if (bytesrevd>=filesize) break;
+	}
+	fclose(fp);
+
+
+	gettimeofday(&tv,NULL);
+	end_time = tv.tv_usec; //in microsecond
+	float RTT = (end_time-start_time) * pow(10,-6); //RTT in seconds
+	throughput = (bytesrevd*pow(10,-6))/RTT;
+
+
+	memset(md5client,'\0',sizeof(md5client));
+	while(strlen(md5client)==0){
+		recv(s,md5client,sizeof(md5client),0);
+	}
+	md5client[strlen(md5client)] = '\0';
+
+
+	int size = filesize;
+	unsigned char md5[MD5_DIGEST_LENGTH];
+	char* file_buffer = (char*) malloc(20000);
+	int file_description;
+
+	file_description = open(filename,O_RDONLY);
+	file_buffer = mmap(0,size,PROT_READ,MAP_SHARED,file_description,0);
+	MD5((unsigned char*) file_buffer, size, md5);
+	munmap(file_buffer, size);
+
+	int i,j;
+	char str[2*MD5_DIGEST_LENGTH+2];
+	memset(str,'\0',sizeof(str));
+	char str2[2];
+	for(i= 0; i<MD5_DIGEST_LENGTH; i++)
+	{
+		sprintf(str2,"%02x",md5[i]);
+		str[i*2]=str2[0];
+		str[(i*2)+1]=str2[1];
+	}
+	str[2*MD5_DIGEST_LENGTH]='\0';
+
+	char md5str[strlen(str)+1];
+	memcpy(md5str,str,strlen(str));
+	md5str[strlen(str)] = '\0';
+
+
+
+	char result[150];
+	memset(result,'\0',sizeof(result));
+	if (strcmp(md5client,md5str)==0){
+		snprintf(result,sizeof(result),"%i bytes received in %f seconds : %f Megabytes/sec",bytesrevd,RTT,throughput);
+	} else {
+		strcpy(result,"Unsuccessful transfer");
+	}
+	send(s,result,sizeof(result),0);
+}
+
+
+void clientRequest (int s) {
+
+	int file_len;
+	char query[20] = "Enter filename:";
+
+	printf("before sending: Enter file.\n");
+	if(send(s,query,sizeof(query),0)==-1){
+		perror("Server send error!"); exit(1);
+	}
+
+	printf("after sending file");
+
+
+	recv(s,&file_len,sizeof(file_len),0);
+	file_len = ntohl(file_len);
+	char filename[100];
+
+	printf("received file name");
+	memset(filename,'\0',sizeof(filename));
+	while(strlen(filename)<file_len){
+		recv(s,filename,sizeof(filename),0);
+	}
+	printf("received file size\n");
+	int file_size = file_exists(filename);
+	if (file_size < 0){
+		return;
+	}
+	int size = file_size;
+	file_size = htonl(file_size);
+	send(s,&file_size,sizeof(int32_t),0);
+	printf("after sending file size\n");
+
+	unsigned char md5[MD5_DIGEST_LENGTH];
+	char* file_buffer = (char*) malloc(20000);
+	int file_description;
+
+	file_description = open(filename,O_RDONLY);
+	file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
+	MD5((unsigned char*) file_buffer, size, md5);
+	munmap(file_buffer, size);
+
+
+	int i,j;
+	char str[2*MD5_DIGEST_LENGTH+2];
+	memset(str,'\0',sizeof(str));
+	char str2[2];
+	for(i=0; i<MD5_DIGEST_LENGTH; i++) {
+		sprintf(str2,"%02x",md5[i]);
+		str[i*2]=str2[0];
+		str[(i*2)+1]=str2[1];
+	}
+        str[2*MD5_DIGEST_LENGTH]='\0';
+
+	char md5str[strlen(str)+1];
+	memcpy(md5str,str,strlen(str));
+	md5str[strlen(str)] = '\0';
+
+	send(s,md5str,strlen(md5str),0);
+
+	char line[20000];
+	FILE *fp = fopen(filename, "r");
+	memset(line,'\0',sizeof(line));
+	int len =0;
+	int sent_len=0;
+	while((len=fread(line,sizeof(char),sizeof(line),fp))>0)
+	{
+		sent_len=send(s,line,len,0);
+		memset(line,'\0',sizeof(line));
+	}
+	fclose(fp);
+	printf("at the end\n");
+}
+
+
+
+
+
+void deleteFile(int s){
+
+
+	int filename_len = 0;
+	int file_exists;
+	char status[5];
+
+	recv(s,&filename_len,sizeof(filename_len),0);
+	filename_len = ntohl(filename_len);
+	char filename[filename_len+1];
+
+
+	memset(filename,'\0',sizeof(filename));
+	while(strlen(filename)==0){
+		recv(s,filename,sizeof(filename),0);
+	}
+
+
+	if (access(filename,F_OK)!=-1){
+		file_exists = 1;
+	} else {
+		file_exists = -1;
+	}
+
+
+	send(s,&file_exists,sizeof(int),0);
+
+	printf("after sending confirmation, before while\n");
+
+	memset(status,'\0',sizeof(status));
+	while(strlen(status)==0){
+		printf("receiving...\n");
+		recv(s,status,sizeof(status),0);
+	}
+
+
+	printf("status = %s\n", status);
+	//printf("strcom %d",strcmp(status,"Yes") );
+	if (strcmp(status,"Yes\n")){
+		int ack2;
+		int result = remove(filename);
+		if (result!=0){
+			ack2 = -1;
+		} else {
+			ack2 = 1;
 		}
-		send(sock, &delete_confirm, sizeof(int),0);
-		printf("send delete_confirm\n");
+		printf("before sending ack...\n");
+		send(s,&ack2,sizeof(int),0);
 	}
 }
 
@@ -181,15 +400,29 @@ int main (int argc, char * argv[]) {
 			}
 
 			if (strcmp(buf,"REQ")==0){
-				//clientRequest(new_s);
-			} else if (strcmp(buf,"UPL")==0){
-				//upload(new_s);
-			} else if (strcmp(buf,"DEL")==0){
+				printf("clientREQ\n");
+				clientRequest(new_sock);
+			} 
+			else if (strcmp(buf,"UPL")==0){
+				upload(new_sock);
+			} 
+                        else if (strcmp(buf,"LIS")==0){
+                                listDirectory(new_sock);
+                        }
+			else if (strcmp(buf,"MKD")==0){
+				makeDirectory(new_sock);
+			}
+			else if (strcmp(buf, "RMD")==0){
+
+			}
+			else if (strcmp(buf, "CHD")==0){
+
+			}
+			else if (strcmp(buf,"DEL")==0){
 				deleteFile(new_sock);
-			} else if (strcmp(buf,"LIS")==0){
-				listDirectory(new_sock);
-			} else if (strcmp(buf,"XIT")==0){
-				//connected = 0;
+			} 
+			else if (strcmp(buf,"XIT")==0){
+				connected = 0;
 			}
 			memset(buf,'\0',sizeof(buf));
 
