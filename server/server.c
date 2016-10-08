@@ -29,19 +29,17 @@
 #define MAX_LINE 256
 
 
-int32_t file_exists(char * filename)
+int32_t fileSize(char * file_name)
 {
-	FILE * file;
-	int32_t size;
-	if (file = fopen(filename, "r"))
-	{
-		fseek(file,0,SEEK_END);
-		size = ftell(file);
-		fseek(file,0,SEEK_SET);
-		fclose(file);
-		return size;
+	FILE * fp;
+	int32_t file_size = -1;
+	if (fp = fopen(file_name, "r")) {
+		fseek(fp,0,SEEK_END);
+		file_size = ftell(fp);
+		fseek(fp,0,SEEK_SET);
+		fclose(fp);
 	}
-	return -1;
+	return file_size;
 }
 
 void makeDirectory(int sock) {
@@ -59,7 +57,6 @@ void makeDirectory(int sock) {
                 recv(sock,dir_name,sizeof(dir_name),0);
         }
 
-	//int create_dir_stats = -1;
         if (access(dir_name,F_OK)!=-1){
                 dir_status = -2;
         } 
@@ -261,8 +258,6 @@ void upload(int s) {
 	memcpy(md5str,str,strlen(str));
 	md5str[strlen(str)] = '\0';
 
-
-
 	char result[150];
 	memset(result,'\0',sizeof(result));
 	if (strcmp(md5client,md5str)==0){
@@ -273,80 +268,78 @@ void upload(int s) {
 	send(s,result,sizeof(result),0);
 }
 
-
 void clientRequest (int s) {
 
-	int file_len;
-	char query[20] = "Enter filename:";
+        int file_len;
+        char query[20] = "Enter filename:";
 
-	printf("before sending: Enter file.\n");
-	if(send(s,query,sizeof(query),0)==-1){
-		perror("Server send error!"); exit(1);
-	}
+        printf("before sending: Enter file.\n");
+        if(send(s,query,sizeof(query),0)==-1){
+                perror("Server send error!"); exit(1);
+        }
 
-	printf("after sending file");
-
-
-	recv(s,&file_len,sizeof(file_len),0);
-	file_len = ntohl(file_len);
-	char filename[100];
-
-	printf("received file name");
-	memset(filename,'\0',sizeof(filename));
-	while(strlen(filename)<file_len){
-		recv(s,filename,sizeof(filename),0);
-	}
-	printf("received file size\n");
-	int file_size = file_exists(filename);
-	if (file_size < 0){
-		return;
-	}
-	int size = file_size;
-	file_size = htonl(file_size);
-	send(s,&file_size,sizeof(int32_t),0);
-	printf("after sending file size\n");
-
-	unsigned char md5[MD5_DIGEST_LENGTH];
-	char* file_buffer = (char*) malloc(20000);
-	int file_description;
-
-	file_description = open(filename,O_RDONLY);
-	file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
-	MD5((unsigned char*) file_buffer, size, md5);
-	munmap(file_buffer, size);
+        printf("after sending file");
 
 
-	int i,j;
-	char str[2*MD5_DIGEST_LENGTH+2];
-	memset(str,'\0',sizeof(str));
-	char str2[2];
-	for(i=0; i<MD5_DIGEST_LENGTH; i++) {
-		sprintf(str2,"%02x",md5[i]);
-		str[i*2]=str2[0];
-		str[(i*2)+1]=str2[1];
-	}
+        recv(s,&file_len,sizeof(file_len),0);
+        file_len = ntohl(file_len);
+        char filename[100];
+
+        printf("received file name");
+        memset(filename,'\0',sizeof(filename));
+        while(strlen(filename)<file_len){
+                recv(s,filename,sizeof(filename),0);
+        }
+        printf("received file size\n");
+        int file_size = fileSize(filename);
+        if (file_size < 0){
+                return;
+        }
+        int size = file_size;
+        file_size = htonl(file_size);
+        send(s,&file_size,sizeof(int32_t),0);
+        printf("after sending file size\n");
+
+        unsigned char md5[MD5_DIGEST_LENGTH];
+        char* file_buffer = (char*) malloc(20000);
+        int file_description;
+
+        file_description = open(filename,O_RDONLY);
+        file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
+        MD5((unsigned char*) file_buffer, size, md5);
+        munmap(file_buffer, size);
+
+
+        int i,j;
+        char str[2*MD5_DIGEST_LENGTH+2];
+        memset(str,'\0',sizeof(str));
+        char str2[2];
+        for(i=0; i<MD5_DIGEST_LENGTH; i++) {
+                sprintf(str2,"%02x",md5[i]);
+                str[i*2]=str2[0];
+                str[(i*2)+1]=str2[1];
+        }
         str[2*MD5_DIGEST_LENGTH]='\0';
 
-	char md5str[strlen(str)+1];
-	memcpy(md5str,str,strlen(str));
-	md5str[strlen(str)] = '\0';
+        char md5str[strlen(str)+1];
+        memcpy(md5str,str,strlen(str));
+        md5str[strlen(str)] = '\0';
 
-	send(s,md5str,strlen(md5str),0);
+        send(s,md5str,strlen(md5str),0);
 
-	char line[20000];
-	FILE *fp = fopen(filename, "r");
-	memset(line,'\0',sizeof(line));
-	int len =0;
-	int sent_len=0;
-	while((len=fread(line,sizeof(char),sizeof(line),fp))>0)
-	{
-		sent_len=send(s,line,len,0);
-		memset(line,'\0',sizeof(line));
-	}
-	fclose(fp);
-	printf("at the end\n");
+        char line[20000];
+        FILE *fp = fopen(filename, "r");
+        memset(line,'\0',sizeof(line));
+        int len =0;
+        int sent_len=0;
+        while((len=fread(line,sizeof(char),sizeof(line),fp))>0)
+        {
+                sent_len=send(s,line,len,0);
+                memset(line,'\0',sizeof(line));
+        }
+        fclose(fp);
+        printf("at the end\n");
 }
-
 
 
 
@@ -402,31 +395,33 @@ void deleteFile(int s){
 	}
 }
 
-void listDirectory (int sock) {
+void list (int sock) {
 
-	int 	dir_size = 0;
-	char 	file_buf[100];
-	DIR	*dir_stream;	
-	struct	dirent *dir_read;		// change var name
+	/* Declare Variables */
+	int 	dir_size = 0;		// Directory size
+	char 	list_buf[100];		// Directory listing
+	DIR	*dir_stream;		// Directory stream
+	struct	dirent *dir_read;	// Format of directoy entries
 
+	/* Opening directory and reading it */
 	dir_stream = opendir("./");
-
 	if (dir_stream != NULL) {
+		/* Calculating the size of directory */
 		while ( dir_read = readdir(dir_stream) ) {
-			strcpy (file_buf, dir_read->d_name);
-			dir_size += sizeof(file_buf);
-			memset(file_buf, '\0', sizeof(file_buf));
+			strcpy (list_buf, dir_read->d_name);
+			dir_size += sizeof(list_buf);
+			memset(list_buf, '\0', sizeof(list_buf));
 		}
-
 		closedir(dir_stream);
 		dir_size = htonl(dir_size);
+		/* Sending directory size to client */
 		send (sock, &dir_size, sizeof(int32_t), 0);
-
+		/* Send directory listing to cleint */	
 		dir_stream = opendir("./");
 		while ( dir_read = readdir(dir_stream) ) {
-			strcpy ( file_buf, dir_read->d_name );
-			send ( sock, file_buf, sizeof(file_buf), 0 );
-			memset(file_buf, '\0', sizeof(file_buf));
+			strcpy ( list_buf, dir_read->d_name );
+			send ( sock, list_buf, sizeof(list_buf), 0 );
+			memset(list_buf, '\0', sizeof(list_buf));
 		}
 
 	}
@@ -486,40 +481,41 @@ int main (int argc, char * argv[]) {
 			perror("ERROR: server-listen()\n");
 		} //end listen check
 
-		if ((new_sock = accept(sock, (struct sockaddr *)&sin, &addr_len)) < 0) {
+		if ((sock = accept(sock, (struct sockaddr *)&sin, &addr_len)) < 0) {
 			perror("ERROR: server-accept()\n");
 		} //end accept check
 		int connected = 1;
 		while (connected) {
 			while( strlen(buf) == 0) {
-				recv(new_sock, buf, sizeof(buf), 0);
+				recv(sock, buf, sizeof(buf), 0);
 			}
-	                printf("\n\nWaiting for user input\n");
+	                printf("\n\nWaiting for operation from client.\n");
 
 			if (strcmp(buf,"REQ")==0){
 				printf("clientREQ\n");
-				clientRequest(new_sock);
+				clientRequest(sock);
 			} 
 			else if (strcmp(buf,"UPL")==0){
-				upload(new_sock);
+				upload(sock);
 			} 
                         else if (strcmp(buf,"LIS")==0){
-                                listDirectory(new_sock);
+                                list(sock);
                         }
 			else if (strcmp(buf,"MKD")==0){
-				makeDirectory(new_sock);
+				makeDirectory(sock);
 			}
 			else if (strcmp(buf, "RMD")==0){
-				removeDirectory(new_sock);
+				removeDirectory(sock);
 			}
 			else if (strcmp(buf, "CHD")==0){
-				changeDirectory(new_sock);
+				changeDirectory(sock);
 			}
 			else if (strcmp(buf,"DEL")==0){
-				deleteFile(new_sock);
+				deleteFile(sock);
 			} 
 			else if (strcmp(buf,"XIT")==0){
 				connected = 0;
+				close(sock);
 			}
 			memset(buf,'\0',sizeof(buf));
 
