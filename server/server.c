@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <openssl/md5.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #define MAX_MD5LENGTH 50
 #define MAX_FILENAME 100
 #define MAX_PENDING 5
@@ -43,30 +45,125 @@ int32_t file_exists(char * filename)
 }
 
 void makeDirectory(int sock) {
-/*
-        int file_name_len = 0;
-        int file_exists;
-        char status[5];
 
-        recv(s,&file_name_len,sizeof(file_name_len),0);
-        file_name_len = ntohl(file_name_len);
-        char file_name[file_name_len+1];
+        int dir_name_len = 0;
+        int dir_status;
 
-        memset(file_name,'\0',sizeof(file_name));
-        while(strlen(file_name)==0){
-                recv(s,file_name,sizeof(file_name),0);
+        recv(sock,&dir_name_len,sizeof(dir_name_len),0);
+        dir_name_len = ntohl(dir_name_len);
+
+        char dir_name[dir_name_len+1];
+
+        memset(dir_name,'\0',sizeof(dir_name));
+        while(strlen(dir_name)==0){
+                recv(sock,dir_name,sizeof(dir_name),0);
         }
 
-        if (access(file_name,F_OK)!=-1){
-                file_exists = -2;
+	//int create_dir_stats = -1;
+        if (access(dir_name,F_OK)!=-1){
+                dir_status = -2;
         } 
-	else if (access(file_name, ))  {
-                file_exists = 1;
-        }
+	else if ((dir_status = mkdir(dir_name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) !=  -1) {
+		dir_status = 1;
+	}
 	
-        send(s,&file_exists,sizeof(int),0);
-*/
+        send(sock,&dir_status,sizeof(int),0);
 }
+
+
+void removeDirectory(int sock) {
+
+        int dir_name_len = 0;
+        int dir_status;
+
+	printf("before receiveing\n");
+        recv(sock,&dir_name_len,sizeof(dir_name_len),0);
+        dir_name_len = ntohl(dir_name_len);
+	printf("after receiving\n");
+        char dir_name[dir_name_len+1];
+
+        memset(dir_name,'\0',sizeof(dir_name));
+        printf("before receiveing 2\n");
+
+        while(strlen(dir_name)==0){
+                recv(sock,dir_name,sizeof(dir_name),0);
+        }
+
+        if (access(dir_name,F_OK)!=-1){
+                dir_status = 1;
+        }
+	else {
+		dir_status = -1;
+		send(sock,&dir_status,sizeof(int),0);
+		return;
+	}	
+        printf("after receiving\n");
+
+        printf("before receiveing\n");
+        send(sock,&dir_status,sizeof(int),0);
+	printf("sfter sendin...\n");
+
+
+	printf("After sending dir exists\n");	
+	char yes_delete[5];
+	int confirm_deletion = -1;
+	memset(yes_delete, '\0', sizeof(yes_delete));
+	printf("before loop\n");
+	
+	//while (strlen(yes_delete)==0) {
+	//	printf("inside loop, yes del: %i\n", strlen(yes_delete));
+	while (	recv(sock, yes_delete, sizeof(yes_delete), 0) <= 0) {}	
+
+	printf("yes del: %c", yes_delete);
+
+	if (strcmp(yes_delete,"Yes")) {
+		if ( rmdir(dir_name) == 0 ) {
+			confirm_deletion = 1;		
+		}
+	}
+	send(sock, &confirm_deletion, sizeof(int), 0);
+	printf("sent!");
+
+}
+
+
+void changeDirectory(int sock) {
+
+        int dir_name_len = 0;
+        int dir_status;
+
+        recv(sock,&dir_name_len,sizeof(dir_name_len),0);
+        dir_name_len = ntohl(dir_name_len);
+
+        char dir_name[dir_name_len+1];
+        memset(dir_name,'\0',sizeof(dir_name));
+
+        while(strlen(dir_name)==0){
+                recv(sock,dir_name,sizeof(dir_name),0);
+        }
+
+	printf("received name, no ceking dir");
+      
+	//printf("chdir status %i\n", chdir(dir_name)); 
+
+	//int tesdir(dir_name);
+	if (chdir(dir_name) == 0 ) {
+		printf("Setting dir_name to 0\n");
+		dir_status = 1;
+	}
+	else if ( access(dir_name,F_OK) == -1) {
+                printf("Setting dir_name to -2\n");
+		dir_status = -2;
+	}
+	else {
+                printf("Setting dir_name to -1\n");
+		dir_status = -1;
+	}
+	
+	printf("Sent %i\n", dir_status);
+        send(sock,&dir_status,sizeof(int),0);
+}
+
 
 void upload(int s) {
 
@@ -392,12 +489,12 @@ int main (int argc, char * argv[]) {
 		if ((new_sock = accept(sock, (struct sockaddr *)&sin, &addr_len)) < 0) {
 			perror("ERROR: server-accept()\n");
 		} //end accept check
-
 		int connected = 1;
 		while (connected) {
 			while( strlen(buf) == 0) {
 				recv(new_sock, buf, sizeof(buf), 0);
 			}
+	                printf("\n\nWaiting for user input\n");
 
 			if (strcmp(buf,"REQ")==0){
 				printf("clientREQ\n");
@@ -413,10 +510,10 @@ int main (int argc, char * argv[]) {
 				makeDirectory(new_sock);
 			}
 			else if (strcmp(buf, "RMD")==0){
-
+				removeDirectory(new_sock);
 			}
 			else if (strcmp(buf, "CHD")==0){
-
+				changeDirectory(new_sock);
 			}
 			else if (strcmp(buf,"DEL")==0){
 				deleteFile(new_sock);
