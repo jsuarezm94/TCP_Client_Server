@@ -455,7 +455,7 @@ void deleteFile( int sock ) {
 	scanf("%s", user_response);
 	user_response[3] = '\0';
 
-	if (send(sock, user_response, sizeof(user_response), 0) == 1) {
+	if (send(sock, user_response, sizeof(user_response), 0) == -1) {
 		perror("ERROR: client-send()\n");
 		exit(1);
 	} // end send check
@@ -472,6 +472,162 @@ printf("SENT user response: %s\n",user_response);
 	}
 
 } //end DELETEFILE
+
+void makeDirectory (int sock) {
+
+	/* Declare variables */
+	char dir_name[100];			// Directory name
+	int dir_name_len;				// Length of directory name
+	int server_response;			// Server confirmation
+
+	/* Prompt user input */
+	printf("Enter name of directory to be created at the server\n");
+	memset(dir_name, '\0', sizeof(dir_name));
+	scanf("%s", dir_name);
+
+	/* Compute length of directory name */
+	dir_name_len = strlen(dir_name);
+	dir_name_len = htonl(dir_name_len);
+
+	/* Send length of directory name and directory name to server */
+	if( send( sock, &dir_name_len, sizeof(dir_name_len),0) == -1) {
+		perror("ERROR: client-send()\n");
+		exit(1);
+	} // end send check
+	if( send( sock, dir_name, sizeof(dir_name),0) == -1) {
+      perror("ERROR: client-send()\n");
+      exit(1);
+	} // end send check
+
+	/* Receive server confirmation regarding creation of directory */
+	if( recv( sock, &server_response, sizeof(server_response),0) == -1) {
+		perror("ERROR: client-recv()\n");
+      exit(1);
+	} //end recv check
+
+	/* Interpret server confirmation and output appropriate message to user */
+	if (server_response == -2) {
+		printf("The directory already exists on server\n");
+	} else if (server_response == -1) {
+		printf("Error in making directory\n");
+	} else if (server_response == 1) {
+		printf("The directory was successfully made\n");
+	} //end if
+} //end MAKEDIRECTORY
+
+void removeDirectory (int sock) {
+
+	/* Declare variables */
+	char dir_name[100];				// Directory name
+	int dir_name_len;					// Length of directory name
+	int server_response;				// Server confirmation
+	char user_confirmation[5];		// User confirmation
+	int server_ack_response;		// Server confirmation
+
+   /* Prompt user input */
+	printf("Enter name of directory to be removed at the server\n");
+	memset(dir_name, '\0', sizeof(dir_name));
+	scanf("%s", dir_name);
+
+   /* Compute length of directory name */
+   dir_name_len = strlen(dir_name);
+   dir_name_len = htonl(dir_name_len);
+
+   /* Send length of directory name and directory name to server */
+   if( send( sock, &dir_name_len, sizeof(dir_name_len),0) == -1) {
+      perror("ERROR: client-send()\n");
+      exit(1);
+   } // end send check
+   if( send( sock, dir_name, sizeof(dir_name),0) == -1) {
+      perror("ERROR: client-send()\n");
+      exit(1);
+   } // end send check
+
+   /* Receive server confirmation regarding existence of directory */
+   if( recv( sock, &server_response, sizeof(server_response),0) == -1) {
+      perror("ERROR: client-recv()\n");
+      exit(1);
+   } //end recv check
+
+   /* Interpret server confirmation and output appropriate message to user */
+	if (server_response == -1) {
+		printf("The directory does not exist on server\n");
+	} else if (server_response == 1) {
+
+   	/* Prompt user input */
+		printf("Directory exists\n");
+		printf("Confirm deletion of directory %s? (Yes\\No)\n", dir_name);
+		scanf("%s", user_confirmation);
+
+		/* Send user confirmation of directory deletion to server */
+		if( send( sock, user_confirmation, sizeof(user_confirmation), 0) == -1) {
+			perror("ERROR: client-recv()\n");
+			exit(1);
+		} // end send check
+
+		if (strcmp(user_confirmation,"No") == 0) {
+			printf("Delete abandoned by the user!\n");
+		} else {
+
+   		/* Receive server confirmation regarding deletion of directory */
+			if( recv( sock, &server_ack_response, sizeof(server_ack_response),0) == -1) {
+				perror("ERROR: client-recv()\n");
+				exit(1);
+			} // end recv check
+
+   		/* Interpret server confirmation and output appropriate message to user */
+			if( server_ack_response == -1) {
+				printf("Failed to delete directory\n");
+			} else if ( server_ack_response == 1) {
+				printf("Directory deleted\n");
+			} // end if
+		} //end if
+	} // end if
+} //end REMOVEDIRECTORY
+
+void changeDirectory (int sock) {
+
+	/* Declare variables */
+   char dir_name[100];				// Directory name
+   int dir_name_len;					// Length of directory name
+   int server_response;				// Server confirmation
+
+   /* Prompt user input */
+   printf("Enter name of directory to change to\n");
+   memset(dir_name, '\0', sizeof(dir_name));
+   scanf("%s", dir_name);
+
+   /* Compute length of directory name */
+   dir_name_len = strlen(dir_name);
+   dir_name_len = htonl(dir_name_len);
+
+   /* Send length of directory name and directory name to server */
+   if( send( sock, &dir_name_len, sizeof(dir_name_len),0) == -1) {
+      perror("ERROR: client-send()\n");
+      exit(1);  
+   } // end send check
+   if( send( sock, dir_name, sizeof(dir_name),0) == -1) {
+      perror("ERROR: client-send()\n");
+      exit(1);
+   } // end send check
+
+   /* Receive server confirmation regarding change of directory */
+   if( recv( sock, &server_response, sizeof(server_response),0) == -1) {
+      perror("ERROR: client-recv()\n");
+      exit(1);
+   } //end recv check
+
+printf("Server: %d\n",server_response);
+
+   /* Interpret server confirmation and output appropriate message to user */
+   if (server_response == -2) {
+      printf("The directory does not exist on server\n");
+   } else if (server_response == -1) {
+      printf("Error in changing directory\n");
+   } else if (server_response == 1) {
+      printf("Changed current directory\n");
+   } //end if
+} //end CHANGEDIRECTORY
 
 int main (int argc, char * argv[]) {
 
@@ -526,7 +682,7 @@ int main (int argc, char * argv[]) {
    while(1) {
       char command[10];
 
-      printf("Enter Command: REQ, UPL, LIS, DEL or XIT: ");
+      printf("Enter Command: REQ, UPL, LIS, DEL, MKD, RMD, CHD or XIT: ");
       scanf("%s",&command);
 
       if(send(sock,command,sizeof(command),0) == -1) {
@@ -542,6 +698,12 @@ int main (int argc, char * argv[]) {
          listDirectory(sock);
       } else if (strcmp(command,"DEL")==0){
          deleteFile(sock);
+		} else if (strcmp(command,"MKD")==0){
+			makeDirectory(sock);
+		} else if (strcmp(command,"RMD")==0){
+			removeDirectory(sock);
+		} else if (strcmp(command,"CHD")==0){
+			changeDirectory(sock);
       } else if (strcmp(command,"XIT")==0){
          close(sock);
          exit(1);
