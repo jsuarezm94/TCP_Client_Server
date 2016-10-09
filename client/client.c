@@ -70,7 +70,9 @@ void requestFile(int s){
 	while(strlen(query)==0){
 		recv(s,query,sizeof(query),0);
 	}
-	if (strlen(query)==0) return;
+	if (strlen(query)==0) {
+		return;
+	}
 	// get filename from user
 	printf("%s ",query);
 	scanf("%s",&filename);
@@ -78,15 +80,27 @@ void requestFile(int s){
 	filelen = strlen(filename);
 	filelen = htonl(filelen);
 	if (send(s,&filelen,sizeof(filelen),0)==-1){
-		perror("client send error."); exit(1);
+		perror("ERROR: client-send()\n");
+		exit(1);
 	}
 	if (send(s,filename,sizeof(filename),0)==-1){
-		perror("client send error."); exit(1);
+		perror("ERROR: client-send()\n");
+		exit(1);
 	}
 	// receive and decode file size
 	int filesize = 0;
 	recv(s,&filesize,sizeof(int32_t),0);
+	//if (recv(s,&filesize,sizeof(int32_t),0) == -1) {
+	//	perror("ERROR: client-recv()\n");
+	//	exit(1);
+	//}
+	int tempSize = filesize;
+        if (tempSize == -1) {
+                printf("File does not exist on the server\n");
+                return;
+        }
 	filesize = ntohl(filesize);
+
 	// receive md5 hash from server
 	memset(md5server,'\0',sizeof(md5server));
 	while(strlen(md5server)==0){
