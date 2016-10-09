@@ -59,201 +59,220 @@ int32_t fileSize(char * file_name)
 }
 
 void requestFile(int s){
-        char query[20];
-        char filename[100];
-        char md5server[100];
-        int filelen;
-        float nBytes, start_time, end_time, throughput;
-        struct timeval tv;
-
-        memset(query,'\0',sizeof(query));
-        while(strlen(query)==0){
-                recv(s,query,sizeof(query),0);
-        }
-        if (strlen(query)==0) return;
-
-        printf("%s ",query);
-        scanf("%s",&filename);
-
-        filelen = strlen(filename);
-        filelen = htonl(filelen);
-//printf("Before sending file details\n");
-        if (send(s,&filelen,sizeof(filelen),0)==-1){
-                perror("client send error."); exit(1);
-        }
-        if (send(s,filename,sizeof(filename),0)==-1){
-                perror("client send error."); exit(1);
-        }
-//printf("After sending file details\n");
-        int filesize = 0;
-        recv(s,&filesize,sizeof(int32_t),0);
-        filesize = ntohl(filesize);
-//printf("Received file size: %d\n", filesize);
-        memset(md5server,'\0',sizeof(md5server));
-        while(strlen(md5server)==0){
-                recv(s,md5server,sizeof(md5server),0);
-        }
-        md5server[strlen(md5server)] = '\0';
-
-//printf("Received md5server: %s\n",md5server);
-
-        gettimeofday(&tv,NULL);
-        start_time = tv.tv_usec;
-
-//printf("Before opening file\n");
-        FILE *fp = fopen(filename,"w");
-        if(!fp)
-        {
-                printf("File does not exist");
-                return;
-        }
-        int n;
-        char line[20000];
-        memset(line,'\0',sizeof(line));
-        int recv_len=0;
-        int bytesrevd = 0;
-        char recvbuf[10000];
-        int rcvbufmax=sizeof(line);
-        if (rcvbufmax>filesize) {
-                rcvbufmax=filesize;
-        }
-        //memset(recvbuf,'\0',sizeof(recvbuf));
-        while ((recv_len=recv(s,recvbuf,rcvbufmax,0))>0){
-        //while (recv_len = recv(s, recvbuf, sizeof(recvbuf), 0) > 0) {
-		bytesrevd += recv_len;
-                int write_size = fwrite(recvbuf, sizeof (char), recv_len, fp);
-                if (write_size<recv_len) {
-                        printf("File write failed!\n");
-                }
-                bzero(line, sizeof(line));
-                memset(recvbuf,'\0',sizeof(recvbuf));
-printf("Bytes received: %d\n", bytesrevd);
-printf("File size: %d\n", filesize);
-                if (bytesrevd>=filesize) break;
-        }
-        fclose(fp);
-
-        gettimeofday(&tv,NULL);
-        end_time = tv.tv_usec; //in microsecond
-        float RTT = (end_time-start_time) * pow(10,-6); //RTT in seconds
-        throughput = (bytesrevd*pow(10,-6))/RTT;
-
-        int size = filesize;
-        unsigned char md5[MD5_DIGEST_LENGTH];
-        char* file_buffer = (char*) malloc(20000);
-        int file_description;
-
-        file_description = open(filename,O_RDONLY);
-        file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
-        MD5((unsigned char*) file_buffer, size, md5);
-        munmap(file_buffer, size);
-
-        int i,j;
-        char str[2*MD5_DIGEST_LENGTH+2];
-        memset(str,'\0',sizeof(str));
-        char str2[2];
-        for(i=0; i<MD5_DIGEST_LENGTH; i++) {
-                sprintf(str2,"%02x",md5[i]);
-                str[i*2]=str2[0];
-                str[(i*2)+1]=str2[1];
-        }
-        str[2*MD5_DIGEST_LENGTH]='\0';
-
-        if (strcmp(md5server,str)==0){
-                printf("Successful Transfer\n");
-                printf("%i bytes received in %f seconds : %f Megabytes/sec",bytesrevd,RTT,throughput);
-                printf("File MD5sum: %s\n",md5server);
-        } else {
-                printf("Transfer unsuccessful.\n");
-        }
-}
-
-
-void uploadFile(int s) {
+	char query[20];
 	char filename[100];
+	char md5server[100];
 	int filelen;
-	char ack[4];
-
-	printf("Please enter filename you would like to send: ");
-	memset(filename,'\0',sizeof(filename));
-	scanf("%s",filename);
-
+	float nBytes, start_time, end_time, throughput;
+	struct timeval tv;
+	// receive query from server
+	memset(query,'\0',sizeof(query));
+	while(strlen(query)==0){
+		recv(s,query,sizeof(query),0);
+	}
+	if (strlen(query)==0) return;
+	// get filename from user
+	printf("%s ",query);
+	scanf("%s",&filename);
+	// send length of filename and filename
 	filelen = strlen(filename);
 	filelen = htonl(filelen);
 	if (send(s,&filelen,sizeof(filelen),0)==-1){
 		perror("client send error."); exit(1);
 	}
-
-        if (send(s,filename,sizeof(filename),0)==-1){
-                perror("client send error."); exit(1);
-        }
-
-        memset(ack,'\0',sizeof(ack));
-        while(strlen(ack)==0)
-        {
-                recv(s,ack,sizeof(ack),0);
-        }
-        if(strcmp(ack,"ACK") != 0)
-        {
-                printf("ACK not received");
-                return;
-        }
-
-	int file_size = fileSize(filename);
-	int size = file_size;
-	file_size = htonl(file_size);
-	send(s,&file_size,sizeof(int32_t),0);
-
-	char line[20000];
-	FILE *fp = fopen(filename, "r");
-	memset(line,'\0',sizeof(line));
-	int len =0;
-	int sent_len=0;
-	while((len=fread(line,sizeof(char),sizeof(line),fp))>0)
+	if (send(s,filename,sizeof(filename),0)==-1){
+		perror("client send error."); exit(1);
+	}
+	// receive and decode file size
+	int filesize = 0;
+	recv(s,&filesize,sizeof(int32_t),0);
+	filesize = ntohl(filesize);
+	// receive md5 hash from server
+	memset(md5server,'\0',sizeof(md5server));
+	while(strlen(md5server)==0){
+		recv(s,md5server,sizeof(md5server),0);
+	}
+	md5server[strlen(md5server)] = '\0';
+	// Calculate starting time
+	gettimeofday(&tv,NULL);
+	start_time = tv.tv_usec;
+	// receive file from server
+	// 	// open file
+	FILE *fp = fopen(filename,"w");
+	if(!fp)
 	{
-		sent_len=send(s,line,len,0);
-		memset(line,'\0',sizeof(line));
+		printf("File does not exist");
+		return;
+	}
+	// receive file from client
+	int n;
+	char line[20000];
+	memset(line,'\0',sizeof(line));
+	int recv_len=0;
+	int bytesrevd = 0;
+	char recvbuf[10000];
+	int rcvbufmax=sizeof(line);
+	if (rcvbufmax>filesize) {
+		rcvbufmax=filesize;
+	}
+	while ((recv_len=recv(s,recvbuf,rcvbufmax,0))>0){
+		bytesrevd += recv_len;
+		int write_size = fwrite(recvbuf, sizeof (char), recv_len, fp);
+		if (write_size<recv_len) {
+			printf("File write failed!\n");
+		}
+		bzero(line, sizeof(line));
+		memset(recvbuf,'\0',sizeof(recvbuf));
+		if (bytesrevd>=filesize) break;
 	}
 	fclose(fp);
-
+	// get end time and throughput
+	gettimeofday(&tv,NULL);
+	end_time = tv.tv_usec; //in microsecond
+	float RTT = (end_time-start_time) * pow(10,-6); //RTT in seconds
+	throughput = (bytesrevd*pow(10,-6))/RTT;
+	// work out md5 hash of received file and compare them
+	int size = filesize;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 	char* file_buffer = (char*) malloc(20000);
 	int file_description;
-
 	file_description = open(filename,O_RDONLY);
-	file_buffer = mmap(0,size,PROT_READ,MAP_SHARED,file_description, 0);
-	MD5((unsigned char*) file_buffer, (int) size, md5);
+	file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
+	MD5((unsigned char*) file_buffer, size, md5);
 	munmap(file_buffer, size);
-
+	// turn md5hash into a string
 	int i,j;
 	char str[2*MD5_DIGEST_LENGTH+2];
 	memset(str,'\0',sizeof(str));
 	char str2[2];
-	for(i=0; i<MD5_DIGEST_LENGTH; i++)
-	{
+	for(i=0; i<MD5_DIGEST_LENGTH; i++) {
 		sprintf(str2,"%02x",md5[i]);
 		str[i*2]=str2[0];
 		str[(i*2)+1]=str2[1];
 	}
 	str[2*MD5_DIGEST_LENGTH]='\0';
-
-	char md5str[strlen(str)+1];
-	memcpy(md5str,str,strlen(str));
-	md5str[strlen(str)] = '\0';
-	send(s,md5str,strlen(str),0);
-	char result[150];
-	memset(result,'\0',sizeof(result));
-	while(strlen(result) == 0)
-	{
-		recv(s,result,sizeof(result),0);
-	}
-
-	if(!strcmp(result,"Unsuccessful transfer")){
-		printf("%s\n",result);
+	// compare the md5 hashes
+	if (strcmp(md5server,str)==0){
+		printf("Successful Transfer\n");
+		printf("%i bytes received in %f seconds : %f Megabytes/sec\n",bytesrevd,RTT,throughput);
+		printf("File MD5sum: %s\n",md5server);
 	} else {
-		printf("Successful Transfer\n%s\n",result);
-		printf("File MD5sum: %s\n",md5str);
+		printf("Transfer unsuccessful.\n");
 	}
+}
+
+
+void upload(int sock) {
+
+	/* Declare variables */
+	char file_name[100];				// File name
+	int file_len;					// Length of file name
+        int file_size;					// File size
+        int original_size;              		// File size used for MD5 hash
+	int server_response;				// Server confirmation
+        FILE *fp;                       		// File pointer
+	char file_line[20000];
+	unsigned char md5[MD5_DIGEST_LENGTH];
+	char* file_buf = (char*) malloc(20000);		// File buffer
+	int file_des;					// File description
+
+	/* Prompt user input */
+	printf("Please enter name of file to send: ");
+	memset(file_name,'\0',sizeof(file_name));
+	scanf("%s",file_name);
+
+	/* Comput length of file name*/
+	file_len = strlen(file_name);
+	file_len = htonl(file_len);
+
+	/* Send length of file name and file name to server */
+	if (send(sock,&file_len,sizeof(file_len),0)==-1){
+		perror("ERROR: client-send()\n");
+		exit(1);
+	}
+        if (send(sock,file_name,sizeof(file_name),0)==-1){
+                perror("ERROR: client-send()\n");
+		exit(1);
+        }
+
+	/* Receive server confirmation regarding readiness to receive file */
+	if (recv(sock,&server_response, sizeof(server_response),0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	}
+	
+	/* Interpret server confirmation and output appropriate message to user */
+	if (server_response != 1) {
+		printf("Server not ready to receive local file\n");
+		return;
+	}
+
+	/* Compute file size and send to server */
+	file_size = fileSize(file_name);
+	original_size = file_size;
+	file_size = htonl(file_size);
+	if (send(sock,&file_size,sizeof(int32_t),0) == -1) {
+		perror("ERROR: client-send()\n");
+		exit(1);
+	}
+	
+	/* Open file */
+	fp = fopen(file_name, "r");
+	memset(file_line,'\0',sizeof(file_line));
+
+	/* Read file and send to server line by line */
+	int len = 0;
+	int sent_len = 0;
+	while ( (len = fread(file_line,sizeof(char),sizeof(file_line),fp)) > 0) {
+                sent_len = send(sock,file_line,len,0);
+                memset(file_line,'\0',sizeof(file_line));
+        }
+	fclose(fp);
+
+	/* Create MD5 hash */
+	file_des = open(file_name,O_RDONLY);
+	file_buf = mmap(0,original_size,PROT_READ,MAP_SHARED,file_des, 0);
+	MD5((unsigned char*) file_buf, (int) original_size, md5);
+	munmap(file_buf, original_size);
+
+	/* Compute MD5 hash on file */
+	int i;
+        char line[2*MD5_DIGEST_LENGTH+2];
+        memset(line,'\0',sizeof(line));
+        char line_check[2];
+        for(i=0; i<MD5_DIGEST_LENGTH; i++) {
+                sprintf(line_check,"%02x",md5[i]);
+                line[i*2]=line_check[0];
+                line[(i*2)+1]=line_check[1];
+        }
+        line[2*MD5_DIGEST_LENGTH]='\0';
+
+        char md5_line[strlen(line)+1];
+        memcpy(md5_line,line,strlen(line));
+        md5_line[strlen(line)] = '\0';
+
+	/* Send MD5 hash to server for verification */
+	if (send(sock,md5_line,strlen(line),0) == -1) {
+		perror("ERROR: client-send()\n");
+		exit(1);
+	}
+
+	/* Receive final confirmation from server and output appropriate message to user */
+        char upload_result[150];
+        memset(upload_result,'\0',sizeof(upload_result));
+
+	if (recv(sock,upload_result,sizeof(upload_result),0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	}
+
+        if(!strcmp(upload_result,"Unsuccessful transfer")){
+                printf("%s\n",upload_result);
+        } else {
+                printf("Successful Transfer\n%s\n",upload_result);
+                printf("File MD5sum: %s\n",md5_line);
+        }
+
 }
 
 void list(int sock ) {
@@ -282,14 +301,14 @@ void list(int sock ) {
 
 } //end LISTDIRECTORY
 
-void deleteFile( int sock ) {
+void delete( int sock ) {
 
 	/* Declare variables */
-	char file_name[MAX_FILENAME];
-	short int file_name_len;
-	int file_ack;
-	char user_response[4];
-	int server_ack;
+	char file_name[MAX_FILENAME];		// Directory name
+	short int file_name_len;		// Length of directory name
+	int server_response;			// Server confirmation
+	char user_confirmation[5];		// User confirmation
+	int server_ack_response;		// Server confirmation
 
 	/* Prompt user input */
 	printf("Enter file name to delete: ");
@@ -310,29 +329,38 @@ void deleteFile( int sock ) {
 	} //end send check
 	
 	/* Receive confirmation of file from server */
-	file_ack = 0;
-	if (file_ack = recv(sock, &file_ack, sizeof(int), 0) == -1) {
+	if (recv( sock,&server_response,sizeof(int),0) == -1) {
 		perror("ERROR: client-recv()\n");
 		exit(1);
 	} // end receive check
 
+	if (server_response == -1) {
+		printf("The file does not exist on server\n");
+		return;
+	} // end if
+
 	/* Confirm deletion of file */
 	printf("File Exists\n");
+	memset(file_name, '\0',sizeof(file_name));
 	printf("Confirm deletion of file %s? (Yes\\No)\n", file_name);
-	scanf("%s", user_response);
-	user_response[3] = '\0';
+	scanf("%s", user_confirmation);
 
-	if (send(sock, user_response, sizeof(user_response), 0) == -1) {
+	if (send(sock, user_confirmation, sizeof(user_confirmation), 0) == -1) {
 		perror("ERROR: client-send()\n");
 		exit(1);
 	} // end send check
 
-printf("SENT user response: %s\n",user_response);
+	if (strcmp(user_confirmation,"No") == 0) {
+		printf("Delete abandoned by the user!\n");
+		return;
+	}
 
 	/* Server confirmation of file deletion */
-	recv(sock, &server_ack, sizeof(int), 0);
-	printf("RECEIVED ACK: %d\n", server_ack);
-	if (server_ack == 1) {
+	if (recv(sock, &server_ack_response, sizeof(int), 0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	}
+	if (server_ack_response == 1) {
 		printf("File deletion: successful\n");
 	} else {
 		printf("File deletion: not successful\n");
@@ -344,7 +372,7 @@ void makeDirectory (int sock) {
 
 	/* Declare variables */
 	char dir_name[100];			// Directory name
-	int dir_name_len;				// Length of directory name
+	int dir_name_len;			// Length of directory name
 	int server_response;			// Server confirmation
 
 	/* Prompt user input */
@@ -362,14 +390,14 @@ void makeDirectory (int sock) {
 		exit(1);
 	} // end send check
 	if( send( sock, dir_name, sizeof(dir_name),0) == -1) {
-      perror("ERROR: client-send()\n");
-      exit(1);
+		perror("ERROR: client-send()\n");
+		exit(1);
 	} // end send check
 
 	/* Receive server confirmation regarding creation of directory */
 	if( recv( sock, &server_response, sizeof(server_response),0) == -1) {
 		perror("ERROR: client-recv()\n");
-      exit(1);
+		exit(1);
 	} //end recv check
 
 	/* Interpret server confirmation and output appropriate message to user */
@@ -385,70 +413,70 @@ void makeDirectory (int sock) {
 void removeDirectory (int sock) {
 
 	/* Declare variables */
-	char dir_name[100];				// Directory name
-	int dir_name_len;					// Length of directory name
-	int server_response;				// Server confirmation
+	char dir_name[100];			// Directory name
+	int dir_name_len;			// Length of directory name
+	int server_response;			// Server confirmation
 	char user_confirmation[5];		// User confirmation
 	int server_ack_response;		// Server confirmation
 
-   /* Prompt user input */
+	/* Prompt user input */
 	printf("Enter name of directory to be removed at the server\n");
 	memset(dir_name, '\0', sizeof(dir_name));
 	scanf("%s", dir_name);
 
-   /* Compute length of directory name */
-   dir_name_len = strlen(dir_name);
-   dir_name_len = htonl(dir_name_len);
+	/* Compute length of directory name */
+	dir_name_len = strlen(dir_name);
+	dir_name_len = htonl(dir_name_len);
 
-   /* Send length of directory name and directory name to server */
-   if( send( sock, &dir_name_len, sizeof(dir_name_len),0) == -1) {
-      perror("ERROR: client-send()\n");
-      exit(1);
-   } // end send check
-   if( send( sock, dir_name, sizeof(dir_name),0) == -1) {
-      perror("ERROR: client-send()\n");
-      exit(1);
-   } // end send check
+	/* Send length of directory name and directory name to server */
+	if( send( sock, &dir_name_len, sizeof(dir_name_len),0) == -1) {
+		perror("ERROR: client-send()\n");
+		exit(1);
+	} // end send check
+	if( send( sock, dir_name, sizeof(dir_name),0) == -1) {
+		perror("ERROR: client-send()\n");
+		exit(1);
+	} // end send check
 
-   /* Receive server confirmation regarding existence of directory */
-   if( recv( sock, &server_response, sizeof(server_response),0) == -1) {
-      perror("ERROR: client-recv()\n");
-      exit(1);
-   } //end recv check
+	/* Receive server confirmation regarding existence of directory */
+	if( recv( sock, &server_response, sizeof(server_response),0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	} //end recv check
 
-   /* Interpret server confirmation and output appropriate message to user */
+	/* Interpret server confirmation and output appropriate message to user */
 	if (server_response == -1) {
 		printf("The directory does not exist on server\n");
-	} else if (server_response == 1) {
+		return;
+	}
 
    	/* Prompt user input */
-		printf("Directory exists\n");
-		printf("Confirm deletion of directory %s? (Yes\\No)\n", dir_name);
-		scanf("%s", user_confirmation);
+	printf("Directory exists\n");
+	printf("Confirm deletion of directory %s? (Yes\\No)\n", dir_name);
+	scanf("%s", user_confirmation);
 
-		/* Send user confirmation of directory deletion to server */
-		if( send( sock, user_confirmation, sizeof(user_confirmation), 0) == -1) {
-			perror("ERROR: client-recv()\n");
-			exit(1);
-		} // end send check
+	/* Send user confirmation of directory deletion to server */
+	if( send( sock, user_confirmation, sizeof(user_confirmation), 0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	} // end send check
 
-		if (strcmp(user_confirmation,"No") == 0) {
-			printf("Delete abandoned by the user!\n");
-		} else {
+	if (strcmp(user_confirmation,"No") == 0) {
+		printf("Delete abandoned by the user!\n");
+		return;
+	}
 
-   		/* Receive server confirmation regarding deletion of directory */
-			if( recv( sock, &server_ack_response, sizeof(server_ack_response),0) == -1) {
-				perror("ERROR: client-recv()\n");
-				exit(1);
-			} // end recv check
+   	/* Receive server confirmation regarding deletion of directory */
+	if( recv( sock, &server_ack_response, sizeof(server_ack_response),0) == -1) {
+		perror("ERROR: client-recv()\n");
+		exit(1);
+	} // end recv check
 
-   		/* Interpret server confirmation and output appropriate message to user */
-			if( server_ack_response == -1) {
-				printf("Failed to delete directory\n");
-			} else if ( server_ack_response == 1) {
-				printf("Directory deleted\n");
-			} // end if
-		} //end if
+	/* Interpret server confirmation and output appropriate message to user */
+	if( server_ack_response == -1) {
+		printf("Failed to delete directory\n");
+	} else if ( server_ack_response == 1) {
+		printf("Directory deleted\n");
 	} // end if
 } //end REMOVEDIRECTORY
 
@@ -560,11 +588,11 @@ int main (int argc, char * argv[]) {
       if (strcmp(command,"REQ")==0) {
          requestFile(sock);
       } else if (strcmp(command,"UPL")==0) {
-         uploadFile(sock);
+         upload(sock);
       } else if (strcmp(command,"LIS")==0) {
          list(sock);
       } else if (strcmp(command,"DEL")==0) {
-         deleteFile(sock);
+         delete(sock);
 		} else if (strcmp(command,"MKD")==0) {
 			makeDirectory(sock);
 		} else if (strcmp(command,"RMD")==0) {
