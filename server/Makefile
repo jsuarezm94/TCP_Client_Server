@@ -1,7 +1,7 @@
 all: server 
 
 server: server.c
-	gcc -o server server.c -lssl
+	gcc -o myftpd server.c -lssl
 
 clean:
-	rm server 
+	rm myftpd

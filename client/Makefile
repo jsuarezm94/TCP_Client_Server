@@ -1,7 +1,7 @@
 all: client
 
 client: client.c
-	gcc -o client client.c -lssl
+	gcc -o myftpd client.c -lssl
 
 clean:
-	rm client
+	rm myftpd

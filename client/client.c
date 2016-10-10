@@ -3,24 +3,7 @@
  * NETID: jsuarezm & jdiazort
  * DATE: OCTOBER 12, 2016
  * COMPUTE NETWORKS
- * TCP PROGRAM - CLIENT
- * DESCRIPTION:
  */
-
-/*
-#include <stdio.h>		// Everything
-#include <stdlib.h>		// Exit
-#include <errno.h>		// PERROR
-#include <string.h>		// Memset
-#include <sys/types.h>		// Socket calls
-#include <sys/socket.h>		// Socket calls
-#include <arpa/inet.h>		// Socket calls
-#include <netinet/in.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <time.h>
-#include <openssl/md5.h>
-*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,28 +43,16 @@ int32_t fileSize(char * file_name)
 
 void requestFile(int s){
 
-        printf("sockett int = %i\n", s);
-
-//	char query[20];
-
+	/* Declare variables */
 	char filename[100];
 	char md5server[100];
 	int filelen;
 	float nBytes, start_time, end_time, throughput;
 	struct timeval tv;
-	// receive query from server
-//	memset(query,'\0',sizeof(query));
-//	while(strlen(query)==0){
-//		recv(s,query,sizeof(query),0);
-//	}
-//	if (strlen(query)==0) {
-//		return;
-//	}
-	// get filename from user
-//	printf("%s ",query);
-	printf("Enter filename: ");
+
+	/* Prompt user input */
+	printf("Enter file name to request from server: ");
 	scanf("%s",&filename);
-	
 
 	/* Send length of filename and filename */
 	filelen = strlen(filename);
@@ -95,48 +66,33 @@ void requestFile(int s){
 		exit(1);
 	}
 
-	printf ("HERE 1\n");
-
 	/* Receive and decode file size */
 	int filesize = 0;
 	recv(s,&filesize,sizeof(int32_t),0);
-	printf("filesize = %i \n", filesize);
-	printf("HERE 2\n");
 	
         filesize = ntohl(filesize);
 	
-	printf("file size after decoding = %i\n", filesize);
-
-	if (filesize == -1){return;}	
-
-	//if (recv(s,&filesize,sizeof(int32_t),0) == -1) {
-	//	perror("ERROR: client-recv()\n");
-	//	exit(1);
-	//}
-	int tempSize = filesize;
-        if (tempSize == -1) {
-                printf("File does not exist on the server\n");
-                return;
-        }
+	if (filesize == -1) {
+                printf("File does not exist on the server\n");		
+		return;
+	}	
+	//int tempSize = filesize;
+        //if (tempSize == -1) {
+        //        printf("File does not exist on the server\n");
+        //        return;
+        //}
 
 	/* Receive md5 hash from server */
 	memset(md5server,'\0',sizeof(md5server));
-
-	printf("HERE 3\n");
-	
-
 	while(strlen(md5server)==0){
 		recv(s,md5server,sizeof(md5server),0);
 	}
 	md5server[strlen(md5server)] = '\0';
 
-	printf("HERE 4\n");
-
 	/* Calculate starting time*/
 	gettimeofday(&tv,NULL);
 	start_time = tv.tv_usec;
-	// receive file from server
-	// 	// open file
+
 	FILE *fp = fopen(filename,"w");
 	if(!fp)
 	{
@@ -144,7 +100,6 @@ void requestFile(int s){
 		return;
 	}
 
-	printf("HERE 5\n");
 	/* Receive file from client */
 	int n;
 	char line[20000];
@@ -158,24 +113,22 @@ void requestFile(int s){
 	if (rcvbufmax>filesize) {
 		rcvbufmax=filesize;
 	}
-	//printf("recvbuf = %s\n", recvbuf);
-	//printf("recvbufmax = %s\n", rcvbufmax);
+	
 	while ((recv_len=recv(s,recvbuf,rcvbufmax,0))>0){
 		bytesrevd += recv_len;
-		printf("bytesrecvd  = %i\n", bytesrevd);
-		printf("recvbug = %s\n", recvbuf);
-		printf("sizeof(line) = %i\n", sizeof(line));
+		//printf("bytesrecvd  = %i\n", bytesrevd);
+		//printf("recvbug = %s\n", recvbuf);
+		//printf("sizeof(line) = %i\n", sizeof(line));
 		int write_size = fwrite(recvbuf, sizeof (char), recv_len, fp);
 		if (write_size<recv_len) {
 			printf("File write failed!\n");
 		}
 		bzero(line, sizeof(line));
 		memset(recvbuf,'\0',sizeof(recvbuf));
-		printf("bytesrevd = %i vs. filesize = %i\n", bytesrevd, filesize);
+		//printf("bytesrevd = %i vs. filesize = %i\n", bytesrevd, filesize);
 		if (bytesrevd>=filesize) break;
 	}
 	fclose(fp);
-	printf("HERE 6\n");
 
 	/* Get end time and throughput */
 	gettimeofday(&tv,NULL);
@@ -193,8 +146,6 @@ void requestFile(int s){
 	MD5((unsigned char*) file_buffer, size, md5);
 	munmap(file_buffer, size);
 
-	printf("HERE 7\n");
-
 	/* Turn md5hash into a string */
 	int i,j;
 	char str[2*MD5_DIGEST_LENGTH+2];
@@ -206,16 +157,15 @@ void requestFile(int s){
 		str[(i*2)+1]=str2[1];
 	}
 	str[2*MD5_DIGEST_LENGTH]='\0';
-	printf("HERE 8\n");
-	/* compare the md5 hashes */
+
+	/* Compare the md5 hashes */
 	if (strcmp(md5server,str)==0){
 		printf("Successful Transfer\n");
 		printf("%i bytes received in %f seconds : %f Megabytes/sec\n",bytesrevd,RTT,throughput);
 		printf("File MD5sum: %s\n",md5server);
 	} else {
-		printf("Transfer unsuccessful.\n");
+		printf("Transfer unsuccessful\n");
 	}
-	printf("");
 }
 
 
@@ -272,7 +222,12 @@ void upload(int sock) {
 		perror("ERROR: client-send()\n");
 		exit(1);
 	}
-	
+
+	if (file_size == -1) {
+		printf("File does not exist locally\n");
+		return;
+	}	
+
 	/* Open file */
 	fp = fopen(file_name, "r");
 	memset(file_line,'\0',sizeof(file_line));
@@ -594,7 +549,7 @@ int main (int argc, char * argv[]) {
 
    /* Check arguments in command line */
    if (argc!=3) {
-      fprintf(stderr,"USAGE ERROR: %s <server ip> <port number> <file or string>\n",argv[0]);
+      fprintf(stderr,"USAGE ERROR: %s <server ip> <port number>\n",argv[0]);
       exit(1);
    } // end arguments check
 
@@ -647,19 +602,19 @@ int main (int argc, char * argv[]) {
       } else if (strcmp(command,"UPL")==0) {
          upload(sock);
       } else if (strcmp(command,"LIS")==0) {
-         list(sock);
-      } else if (strcmp(command,"DEL")==0) {
-         delete(sock);
-		} else if (strcmp(command,"MKD")==0) {
-			makeDirectory(sock);
-		} else if (strcmp(command,"RMD")==0) {
-			removeDirectory(sock);
-		} else if (strcmp(command,"CHD")==0) {
-			changeDirectory(sock);
-      } else if (strcmp(command,"XIT")==0) {
-         close(sock);
-			printf("Session has been closed\n");
-         exit(1);
-      }
+		list(sock);
+	} else if (strcmp(command,"DEL")==0) {
+		delete(sock);
+	} else if (strcmp(command,"MKD")==0) {
+		makeDirectory(sock);
+	} else if (strcmp(command,"RMD")==0) {
+		removeDirectory(sock);
+	} else if (strcmp(command,"CHD")==0) {
+		changeDirectory(sock);
+	} else if (strcmp(command,"XIT")==0) {
+		close(sock);
+		printf("Session has been closed\n");
+         	exit(1);
+	}
    } //end WHILE
 } // end MAIN

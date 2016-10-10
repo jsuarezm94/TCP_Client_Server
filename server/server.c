@@ -40,7 +40,6 @@ int32_t fileSize(char * file_name)
 		fseek(fp,0,SEEK_SET);
 		fclose(fp);
 	}
-	printf("leaving file size function HERE 99\n");
 	return file_size;
 }
 
@@ -94,22 +93,13 @@ void removeDirectory(int sock) {
 		return;
 	}	
 
-        printf("before receiveing\n");
         send(sock,&dir_status,sizeof(int),0);
-	printf("sfter sendin...\n");
 
-
-	printf("After sending dir exists\n");	
 	char yes_delete[5];
 	int confirm_deletion = -1;
 	memset(yes_delete, '\0', sizeof(yes_delete));
-	printf("before loop\n");
 	
-	//while (strlen(yes_delete)==0) {
-	//	printf("inside loop, yes del: %i\n", strlen(yes_delete));
 	while (	recv(sock, yes_delete, sizeof(yes_delete), 0) <= 0) {}	
-
-	printf("yes del: %c", yes_delete);
 
 	if (strcmp(yes_delete,"Yes")) {
 		if ( rmdir(dir_name) == 0 ) {
@@ -117,8 +107,6 @@ void removeDirectory(int sock) {
 		}
 	}
 	send(sock, &confirm_deletion, sizeof(int), 0);
-	printf("sent!");
-
 }
 
 
@@ -137,25 +125,16 @@ void changeDirectory(int sock) {
                 recv(sock,dir_name,sizeof(dir_name),0);
         }
 
-	printf("received name, no ceking dir");
-      
-	//printf("chdir status %i\n", chdir(dir_name)); 
-
-	//int tesdir(dir_name);
 	if (chdir(dir_name) == 0 ) {
-		printf("Setting dir_name to 0\n");
 		dir_status = 1;
 	}
 	else if ( access(dir_name,F_OK) == -1) {
-                printf("Setting dir_name to -2\n");
 		dir_status = -2;
 	}
 	else {
-                printf("Setting dir_name to -1\n");
 		dir_status = -1;
 	}
 	
-	printf("Sent %i\n", dir_status);
         send(sock,&dir_status,sizeof(int),0);
 }
 
@@ -191,6 +170,10 @@ void upload(int sock) {
         //gt 1 int file_size = 0;
         recv(sock,&file_size,sizeof(int32_t),0);
         file_size = ntohl(file_size);
+
+	if (file_size == -1) {
+		return;
+	}
 
 	/* Starting timer for RTT calculation */
         gettimeofday(&tv,NULL);
@@ -268,7 +251,6 @@ void upload(int sock) {
                 strcpy(response,"Unsuccessful transfer");
         }
         send(sock,response,sizeof(response),0);
-	printf("sent transfer\n");
 }
 
 
@@ -488,23 +470,25 @@ int main (int argc, char * argv[]) {
    } //end bind check
 
 	while(1) {
-		
+
 		if ((listen(sock, MAX_PENDING)) < 0) {
 			perror("ERROR: server-listen()\n");
+			exit(1);
 		} //end listen check
 
 		if ((sock = accept(sock, (struct sockaddr *)&sin, &addr_len)) < 0) {
 			perror("ERROR: server-accept()\n");
+			exit(1);
 		} //end accept check
 		int connected = 1;
+		printf("Connection succesful with client\n");
 		while (connected) {
 			while( strlen(buf) == 0) {
 				recv(sock, buf, sizeof(buf), 0);
 			}
-	                printf("\n\nWaiting for operation from client.\n");
+	                printf("Waiting for operation from client.\n");
 
 			if (strcmp(buf,"REQ")==0){
-				printf("clientREQ\n");
 				clientRequest(sock);
 			} 
 			else if (strcmp(buf,"UPL")==0){
@@ -530,9 +514,6 @@ int main (int argc, char * argv[]) {
 				close(sock);
 			}
 			memset(buf,'\0',sizeof(buf));
-
 		} //end connection WHILE
-
 	} // end WHILE
-
 } // end MAIN
