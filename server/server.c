@@ -23,6 +23,7 @@
 #include <openssl/md5.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 #define MAX_MD5LENGTH 50
 #define MAX_FILENAME 100
 #define MAX_PENDING 5
@@ -39,6 +40,7 @@ int32_t fileSize(char * file_name)
 		fseek(fp,0,SEEK_SET);
 		fclose(fp);
 	}
+	printf("leaving file size function HERE 99\n");
 	return file_size;
 }
 
@@ -161,25 +163,22 @@ void changeDirectory(int sock) {
 void upload(int sock) {
 	
 	/* Initializing variables */
-        int file_name_len;
-        char md5_recv[100];
-        struct timeval tv;
-        float start_time, end_time, nBytes, throughput;
-        char file_name[100];
+        int file_name_len;				// File name
+        char md5_recv[100];				// Md5 buf
+        struct timeval tv;				// Time structure 
+        float start_time, end_time, nBytes, throughput;	// Time variables
+        char file_name[100];				// File name 
+        int file_size = 0; 				// File size
 
-        int file_size = 0; // gt 1
 
 	/* Reveiving file name length*/
         recv(sock,&file_name_len,sizeof(file_name_len),0);
         file_name_len = ntohl(file_name_len);
-        printf("Received file_name_length\n");
 
 	/* Receiving file name */
         memset(file_name,'\0',sizeof(file_name));
-        //while(strlen(file_name)<file_name_len){
-                recv(sock,file_name,sizeof(file_name),0);
-        //}
-        printf("file_name received.\n");
+        recv(sock,file_name,sizeof(file_name),0);
+        
 
 	/* Sending file name and its file name length received confirmation*/
 	int y = 1;
@@ -192,7 +191,6 @@ void upload(int sock) {
         //gt 1 int file_size = 0;
         recv(sock,&file_size,sizeof(int32_t),0);
         file_size = ntohl(file_size);
-        printf("filesize received = %d\n", file_size);
 
 	/* Starting timer for RTT calculation */
         gettimeofday(&tv,NULL);
@@ -201,16 +199,12 @@ void upload(int sock) {
 	/* Opening file */
         FILE *fp = fopen(file_name,"w");
 
-	printf("Here1\n");
-
-
-        int n;
-        char file_line[20000];
-        memset(file_line,'\0',sizeof(file_line));
-        int recv_len=0;
-        int bytes_recv = 0;
-        char recv_buf[10000];
-        int recv_buf_max=sizeof(file_line);
+        char file_line[20000];				// File line buffer
+        memset(file_line,'\0',sizeof(file_line)); 
+        int recv_len=0;					// Receive length
+        int bytes_recv = 0;				// Bytes received
+        char recv_buf[10000];				// Receive buffer
+        int recv_buf_max=sizeof(file_line);		// Max buf receive
 
 	/* Receiving file from client */
         if (recv_buf_max>file_size)
@@ -225,58 +219,50 @@ void upload(int sock) {
         }
         fclose(fp);
 
-        printf("Here2\n");
-
 	/* Stopping timer for RTT calculation */
         gettimeofday(&tv,NULL);
         end_time = tv.tv_usec; //in microsecond
         float RTT = (end_time-start_time) * pow(10,-6); //RTT in seconds
         throughput = (bytes_recv*pow(10,-6))/RTT;
 
-        printf("Here3\n");
-
 	/* Receiving md5 from client */
         memset(md5_recv,'\0',sizeof(md5_recv));
-        //while(strlen(md5client)==0){
-                recv(sock,md5_recv,sizeof(md5_recv),0);
-        //}
+        recv(sock,md5_recv,sizeof(md5_recv),0);
         md5_recv[strlen(md5_recv)] = '\0';
 
-        printf("Here4\n");
-
-        int size_orig = file_size;
-        unsigned char md5_buf[MD5_DIGEST_LENGTH];
-        char* file_buffer = (char*) malloc(20000);
-        int file_description;
+        int size_orig = file_size;			// Size of original file
+        unsigned char md5_hash_buf[MD5_DIGEST_LENGTH];	// md5 buffer
+        char* file_buffer = (char*) malloc(20000);	// File buffer reading
+        int file_description;				// File descriptor
 
 	/* Opening file and md5 */
         file_description = open(file_name,O_RDONLY);
         file_buffer = mmap(0,size_orig,PROT_READ,MAP_SHARED,file_description,0);
-        MD5((unsigned char*) file_buffer, size_orig, md5_buf);
+        MD5((unsigned char*) file_buffer, size_orig, md5_hash_buf);
 
         munmap(file_buffer, size_orig);
 
-        int i,j;
-        char line[2*MD5_DIGEST_LENGTH+2];
-        memset(line,'\0',sizeof(line));
-        char line_check[2];
+        int i,j;					// loop variables
+        char md5_line[2*MD5_DIGEST_LENGTH+2];		// 
+        memset(md5_line,'\0',sizeof(md5_line));			// 
+        char line_check[2];				// 
 	/* md5 computation*/
         for(i= 0; i<MD5_DIGEST_LENGTH; i++)
         {
-                sprintf(line_check,"%02x",md5_buf[i]);
-                line[i*2]=line_check[0];
-                line[(i*2)+1]=line_check[1];
+                sprintf(line_check,"%02x",md5_hash_buf[i]);
+                md5_line[i*2]=line_check[0];
+                md5_line[(i*2)+1]=line_check[1];
         }
-        line[2*MD5_DIGEST_LENGTH]='\0';
+        md5_line[2*MD5_DIGEST_LENGTH]='\0';
 
-        char md5_line[strlen(line)+1];
-        memcpy(md5_line,line,strlen(line));
-        md5_line[strlen(line)] = '\0';
+        char md5_buf[strlen(md5_line)+1];
+        memcpy(md5_buf,md5_line,strlen(md5_line));
+        md5_buf[strlen(md5_line)] = '\0';
 
 	/* Sending Response to Client with bytes received, RTT, and throughpout*/
         char response[150];
         memset(response,'\0',sizeof(response));
-        if (strcmp(md5_recv,md5_line)==0){
+        if (strcmp(md5_recv,md5_buf)==0){
                 snprintf(response,sizeof(response),"%i bytes received in %f seconds : %f Megabytes/sec",bytes_recv,RTT,throughput);
         } else {
                 strcpy(response,"Unsuccessful transfer");
@@ -286,88 +272,93 @@ void upload(int sock) {
 }
 
 
-void clientRequest (int s) {
+void clientRequest (int sock) {
 
-        int file_len;
-        char query[20] = "Enter filename:";
+	/* Initializing Variables */
+        int file_len;				// File length
+        char file_name[100];			// File name
 
-        printf("before sending: Enter file.\n");
-        if(send(s,query,sizeof(query),0)==-1){
-                perror("Server send error!"); exit(1);
-        }
-
-        printf("after sending file");
-
-
-        recv(s,&file_len,sizeof(file_len),0);
+	/* Receiving file length  */
+        recv(sock,&file_len,sizeof(file_len),0);
         file_len = ntohl(file_len);
-        char filename[100];
+	memset(file_name,'\0',sizeof(file_name));
+		
+	/* Receiving file name */
+        while(strlen(file_name)<file_len){
+                recv(sock,file_name,sizeof(file_name),0);
+        }
 
-        printf("received file name");
-        memset(filename,'\0',sizeof(filename));
-        while(strlen(filename)<file_len){
-                recv(s,filename,sizeof(filename),0);
-        }
-        printf("received file size\n");
-        int file_size = fileSize(filename);
-        if (file_size < 0){
-                return;
-        }
+	/* Getting file size and encoding it */
+        int file_size = fileSize(file_name);
         int size = file_size;
         file_size = htonl(file_size);
-        send(s,&file_size,sizeof(int32_t),0);
-        printf("after sending file size\n");
 
 
-        unsigned char md5[MD5_DIGEST_LENGTH];
+        /* Sending file size as acknowledgement of receiving file size and file name */
+        send(sock,&file_size,sizeof(int32_t),0);
+        if (size == -1) {return;}
+
+	/* Initializing variables for MD5 hash */
+        unsigned char md5_hash_buf[MD5_DIGEST_LENGTH];		// md5 hash
         char* file_buffer = (char*) malloc(20000);
-        int file_description;
+        int file_description;					
 
-        file_description = open(filename,O_RDONLY);
+	/* Opening File */
+        file_description = open(file_name,O_RDONLY);
         file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
-        MD5((unsigned char*) file_buffer, size, md5);
+        MD5((unsigned char*) file_buffer, size, md5_hash_buf);
         munmap(file_buffer, size);
 
-
+	/* Initializing variables for md5 hash */
+        char temp[2];
+        char md5_line[2*MD5_DIGEST_LENGTH+2];
+        memset(md5_line,'\0',sizeof(md5_line));
+	/* MD5 hash*/
         int i,j;
-        char str[2*MD5_DIGEST_LENGTH+2];
-        memset(str,'\0',sizeof(str));
-        char str2[2];
         for(i=0; i<MD5_DIGEST_LENGTH; i++) {
-                sprintf(str2,"%02x",md5[i]);
-                str[i*2]=str2[0];
-                str[(i*2)+1]=str2[1];
+                sprintf(temp,"%02x",md5_hash_buf[i]);
+                md5_line[i*2]=temp[0];
+                md5_line[(i*2)+1]=temp[1];
         }
-        str[2*MD5_DIGEST_LENGTH]='\0';
+        md5_line[2*MD5_DIGEST_LENGTH]='\0';
 
-        char md5str[strlen(str)+1];
-        memcpy(md5str,str,strlen(str));
-        md5str[strlen(str)] = '\0';
+	/* Initializing md5 buffer and send it*/
+        char md5_buf[strlen(md5_line)+1];
+        memcpy(md5_buf,md5_line,strlen(md5_line));
+        md5_buf[strlen(md5_line)] = '\0';
+        send(sock,md5_buf,strlen(md5_buf),0);
 
-        send(s,md5str,strlen(md5str),0);
-
-        char line[20000];
-        FILE *fp = fopen(filename, "r");
-        memset(line,'\0',sizeof(line));
+	/* Initializing variables to send file */
         int len =0;
         int sent_len=0;
+        char line[20000];
+        FILE *fp = fopen(file_name, "r");
+        memset(line,'\0',sizeof(line));
+
+	/* Witing for client to call the recv fucntion */	
+	int x=0;
+	int y=0;
+	while (x<100000) {
+		while(y<1000000){
+			y++;
+		}
+		x++;
+	}
+	/* Sending the file */	
         while((len=fread(line,sizeof(char),sizeof(line),fp))>0)
         {
-                //printf("Sent line = %s\n", line);
-                sent_len=send(s,line,len,0);
+                sent_len=send(sock,line,len,0);
                 memset(line,'\0',sizeof(line));
-                //printf("sent length = %i\n", sent_len);
 		bzero(line,sizeof(line));
         }
         fclose(fp);
-        printf("at the end\n");
 
 }
 
 
 
 
-void delete(int s){
+void delete(int sock){
 
 	/* Initializing Variables*/
 	int file_name_len = 0;
@@ -375,32 +366,32 @@ void delete(int s){
 	char delete_confirm[5];
 
 	/* Receiving file name length */
-	recv(s,&file_name_len,sizeof(file_name_len),0);
+	recv(sock,&file_name_len,sizeof(file_name_len),0);
 	file_name_len = ntohl(file_name_len);
 
 	char file_name[file_name_len+1];
 
 	/* Receiving file name */
 	memset(file_name,'\0',sizeof(file_name));
-	recv(s,file_name,sizeof(file_name),0);
+	recv(sock,file_name,sizeof(file_name),0);
 
 	/* Determinin if dile exists */
 	if (access(file_name,F_OK)!=-1){
 		file_exists = 1;
 	} else {
 		file_exists = -1;
-	        send(s,&file_exists,sizeof(int),0);
+	        send(sock,&file_exists,sizeof(int),0);
 		return;
 	}
 
 	/* Sending file existance confirmation */
-	send(s,&file_exists,sizeof(int),0);
+	send(sock,&file_exists,sizeof(int),0);
 
 
 	/* Receiving confirmation to delete */
 	memset(delete_confirm,'\0',sizeof(delete_confirm));
 	while(strlen(delete_confirm)==0){
-		recv(s,delete_confirm,sizeof(delete_confirm),0);
+		recv(sock,delete_confirm,sizeof(delete_confirm),0);
 	}
 
 	/* Deleting file */
@@ -412,7 +403,7 @@ void delete(int s){
 		} else {
 			removed = 1;
 		}
-		send(s,&removed,sizeof(int),0);
+		send(sock,&removed,sizeof(int),0);
 	}
 }
 

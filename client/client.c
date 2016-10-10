@@ -59,24 +59,31 @@ int32_t fileSize(char * file_name)
 }
 
 void requestFile(int s){
-	char query[20];
+
+        printf("sockett int = %i\n", s);
+
+//	char query[20];
+
 	char filename[100];
 	char md5server[100];
 	int filelen;
 	float nBytes, start_time, end_time, throughput;
 	struct timeval tv;
 	// receive query from server
-	memset(query,'\0',sizeof(query));
-	while(strlen(query)==0){
-		recv(s,query,sizeof(query),0);
-	}
-	if (strlen(query)==0) {
-		return;
-	}
+//	memset(query,'\0',sizeof(query));
+//	while(strlen(query)==0){
+//		recv(s,query,sizeof(query),0);
+//	}
+//	if (strlen(query)==0) {
+//		return;
+//	}
 	// get filename from user
-	printf("%s ",query);
+//	printf("%s ",query);
+	printf("Enter filename: ");
 	scanf("%s",&filename);
-	// send length of filename and filename
+	
+
+	/* Send length of filename and filename */
 	filelen = strlen(filename);
 	filelen = htonl(filelen);
 	if (send(s,&filelen,sizeof(filelen),0)==-1){
@@ -87,9 +94,21 @@ void requestFile(int s){
 		perror("ERROR: client-send()\n");
 		exit(1);
 	}
-	// receive and decode file size
+
+	printf ("HERE 1\n");
+
+	/* Receive and decode file size */
 	int filesize = 0;
 	recv(s,&filesize,sizeof(int32_t),0);
+	printf("filesize = %i \n", filesize);
+	printf("HERE 2\n");
+	
+        filesize = ntohl(filesize);
+	
+	printf("file size after decoding = %i\n", filesize);
+
+	if (filesize == -1){return;}	
+
 	//if (recv(s,&filesize,sizeof(int32_t),0) == -1) {
 	//	perror("ERROR: client-recv()\n");
 	//	exit(1);
@@ -99,15 +118,21 @@ void requestFile(int s){
                 printf("File does not exist on the server\n");
                 return;
         }
-	filesize = ntohl(filesize);
 
-	// receive md5 hash from server
+	/* Receive md5 hash from server */
 	memset(md5server,'\0',sizeof(md5server));
+
+	printf("HERE 3\n");
+	
+
 	while(strlen(md5server)==0){
 		recv(s,md5server,sizeof(md5server),0);
 	}
 	md5server[strlen(md5server)] = '\0';
-	// Calculate starting time
+
+	printf("HERE 4\n");
+
+	/* Calculate starting time*/
 	gettimeofday(&tv,NULL);
 	start_time = tv.tv_usec;
 	// receive file from server
@@ -118,34 +143,47 @@ void requestFile(int s){
 		printf("File does not exist");
 		return;
 	}
-	// receive file from client
+
+	printf("HERE 5\n");
+	/* Receive file from client */
 	int n;
 	char line[20000];
 	memset(line,'\0',sizeof(line));
 	int recv_len=0;
 	int bytesrevd = 0;
 	char recvbuf[10000];
+        memset(recvbuf,'\0',sizeof(recvbuf)); //
 	int rcvbufmax=sizeof(line);
+
 	if (rcvbufmax>filesize) {
 		rcvbufmax=filesize;
 	}
+	//printf("recvbuf = %s\n", recvbuf);
+	//printf("recvbufmax = %s\n", rcvbufmax);
 	while ((recv_len=recv(s,recvbuf,rcvbufmax,0))>0){
 		bytesrevd += recv_len;
+		printf("bytesrecvd  = %i\n", bytesrevd);
+		printf("recvbug = %s\n", recvbuf);
+		printf("sizeof(line) = %i\n", sizeof(line));
 		int write_size = fwrite(recvbuf, sizeof (char), recv_len, fp);
 		if (write_size<recv_len) {
 			printf("File write failed!\n");
 		}
 		bzero(line, sizeof(line));
 		memset(recvbuf,'\0',sizeof(recvbuf));
+		printf("bytesrevd = %i vs. filesize = %i\n", bytesrevd, filesize);
 		if (bytesrevd>=filesize) break;
 	}
 	fclose(fp);
-	// get end time and throughput
+	printf("HERE 6\n");
+
+	/* Get end time and throughput */
 	gettimeofday(&tv,NULL);
 	end_time = tv.tv_usec; //in microsecond
 	float RTT = (end_time-start_time) * pow(10,-6); //RTT in seconds
 	throughput = (bytesrevd*pow(10,-6))/RTT;
-	// work out md5 hash of received file and compare them
+
+	/* Work out md5 hash of received file and compare them */
 	int size = filesize;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 	char* file_buffer = (char*) malloc(20000);
@@ -154,7 +192,10 @@ void requestFile(int s){
 	file_buffer = mmap(0,size, PROT_READ, MAP_SHARED, file_description, 0);
 	MD5((unsigned char*) file_buffer, size, md5);
 	munmap(file_buffer, size);
-	// turn md5hash into a string
+
+	printf("HERE 7\n");
+
+	/* Turn md5hash into a string */
 	int i,j;
 	char str[2*MD5_DIGEST_LENGTH+2];
 	memset(str,'\0',sizeof(str));
@@ -165,7 +206,8 @@ void requestFile(int s){
 		str[(i*2)+1]=str2[1];
 	}
 	str[2*MD5_DIGEST_LENGTH]='\0';
-	// compare the md5 hashes
+	printf("HERE 8\n");
+	/* compare the md5 hashes */
 	if (strcmp(md5server,str)==0){
 		printf("Successful Transfer\n");
 		printf("%i bytes received in %f seconds : %f Megabytes/sec\n",bytesrevd,RTT,throughput);
@@ -173,6 +215,7 @@ void requestFile(int s){
 	} else {
 		printf("Transfer unsuccessful.\n");
 	}
+	printf("");
 }
 
 
@@ -293,8 +336,8 @@ void list(int sock ) {
 
 	/* Declare variables */
 	int dir_size=0;				// Directory size
-	int dir_bytes=0;				// Bytes per directory entry
-	float n_bytes=0;				// Total bytes received
+	int dir_bytes=0;			// Bytes per directory entry
+	float n_bytes=0;			// Total bytes received
 	char list_buf[100];			// Buffer holding list of directory files
 
 	/* Receive size of directory from server */
