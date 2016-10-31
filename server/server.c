@@ -427,12 +427,12 @@ void list (int sock) {
 int main (int argc, char * argv[]) {
 
    /* Declare variables */
-   struct	sockaddr_in sin;		// Address structure
-   int		addr_len;				// Length
-   char		buf[10];					// Buffer for commands
+   struct	sockaddr_in sin;	// Address structure
+   int		addr_len;		// Length
+   char		buf[10];		// Buffer for commands
    int		sock, new_sock;		// Sockets
    int		opt = 1;
-   int		port_num;				// Port number
+   int		port_num;		// Port number
 
    /* Check arguments in command line */
    if (argc!=2) {
@@ -447,6 +447,7 @@ int main (int argc, char * argv[]) {
    /* Build address data structure */
    bzero((char *)&sin, sizeof(sin));
    sin.sin_family = AF_INET;
+	printf("HERE 1\n");
    sin.sin_addr.s_addr = INADDR_ANY;
    sin.sin_port = htons(port_num);
 
@@ -470,6 +471,7 @@ int main (int argc, char * argv[]) {
    } //end bind check
 
 	while(1) {
+		printf("Waiting for clien coneection.\n");
 
 		if ((listen(sock, MAX_PENDING)) < 0) {
 			perror("ERROR: server-listen()\n");
@@ -512,6 +514,8 @@ int main (int argc, char * argv[]) {
 			else if (strcmp(buf,"XIT")==0){
 				connected = 0;
 				close(sock);
+				printf("Client has ended session..\n");
+				//main(argc, argv);
 			}
 			memset(buf,'\0',sizeof(buf));
 		} //end connection WHILE
